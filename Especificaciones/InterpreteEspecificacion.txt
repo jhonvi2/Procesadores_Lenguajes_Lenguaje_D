@@ -1,0 +1,323 @@
+ESPECIFICACIÓN INTÉRPRETE LENGUAJE D
+/////////////////////////////////////////////////////////////////
+OBJETIVO:
+Como objetivo principal se plantea el diseño de un intérprete para el lenguaje D, que sea capaz de llevar a cabo el flujo del programa correctamente,
+teniendo en cuenta las diferentes partes que lo componen. En primer lugar se tratarán los tipos declarados con sus correspondientes definiciones.
+En segundo lugar se tratará la inicialización de los individuos de los tipos primitivos y, por último las descripciones
+que contienen las consultas que se pueden realizar sobre los individuos inicializados que no cambiarán a lo largo del programa. Al contrario
+de las descripciones que son independientes unas de otras.
+
+
+(DECISION 1) Un programa D tiene tipos que serán necesario conocer en determinados momentos del programa
+ya que las inicializaciones y consultas dependen de ello. Dichos tipos  no cambiarán a lo largo del programa.
+Una solución es guardar estos tipos con sus definiciones en un almacén global que constará del identificador del tipo y
+su correspondiente definición. Se necesita almacenar esta información al procesar cada tipo.
+                                                                                                    almacen_tipos
+TIPOS:                                                                                   ------------------------------------------------------------
+ProfesorConVocacion(_x) <- Profesor(_x) && PersonaConVocacion(_x) && Documento(_x),       {ProfesorConVocacion = [[Profesor , PersonaConVocacion]]}
+Documento(_d) <- Tesis(_d),                                                              {Documento = [[Tesis]]}
+Documento(_d) <- Articulo(_d),                                                            {Documento = [[Tesis] , [Articulo]]}
+Profesor(_d) <-,                                                                          {Profesor = []}
+                                                                                          ------------------------------------------------------------
+ La forma en la que se actualizará el almacén será:
+
+ (a) Si es tipo primitivo se llevará a cabo la actualización del almacén introduciendo el nombre del tipo junto a un conjunto vacio, tal que:
+
+     primitivo:  i=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW  {actualizar_almacen_tipos(i=[])} ;
+
+ (b) Si es tipo no primitivo se llevará a cabo la actualización del almacén tal que:
+       no_primitivo: z=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW r=cuerpoTipo
+         {si (z se encuentra ya en almacen_definiciones_tipos ) entonces
+              definicionPrevia = extrae la definición previa de z
+              añadir 'r' a definicionPrevia
+              actualizar_almacen_tipos(z,definicionPrevia)
+         sino
+              definicionInicial = r
+              actualizar_almacen_tipos(z,definicionInicial)}
+
+       (Parametro a devolver r, tipos en el cuerpo de los tipos no primitivos)
+         cuerpoTipo:a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO AND r=cuerpoTipo {incluir 'a' en r}
+                   |a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO;                 {incluir 'a' en r}
+
+(DECISION 2) Un programa D tiene inicializaciones que serán necesarias conocer en determinados momentos del programa porque las consultas dependen de ello.
+Se considera que cuando un individuo se inicializa, permanece a lo largo de todas las descripciones del programa. Tampoco es necesario que
+todo individuo tenga tipo. Una solución es guardar estas incializaciones en un almacén global que contendrá cada
+individuo junto a los tipos asignados a dicho individuo. Se necesita almacenar esta información al procesar cada inicialización.
+
+INICIALIZACION:                                                                                         almacen_inicializaciones
+Profesor(juan), Profesor (pedro), PersonaConVocacion(pedro), PersonaConVocacion(juan)                ----------------------------
+                                                                                                       {juan = [Profesor,PersonaConVocacion]
+                                                                                                       {pedro = [Profesor,PersonaConVocacion]}
+                                                                                                       ----------------------------
+ La forma en la que se actualizará el almacén será:
+
+ decl_inicializaciones:i=IDENTTIPO PARENTESISABIERTO g=IDENTINDIVIDUOSREL PARENTESISCERRADO COMA decl_inicializaciones
+                      |i=IDENTTIPO PARENTESISABIERTO g=IDENTINDIVIDUOSREL PARENTESISCERRADO;
+                  {si (g se encuentra ya en el almacen_inicializaciones)
+                       tiposPrevios = extrae los tipos previos de g
+                       añadir 'i' a tiposPrevios
+                       actualizar_almacen_inicializaciones(g,tiposPrevios)
+                  sino
+                        añadir 'i' a tiposIniciales
+                        actualizar_almacen_inicializaciones(g,tiposIniciales)}
+
+(DECISION 2.1)Para saber si las inicializaciones de un programa D dan lugar a nuevos tipos no primitivos
+ proponemos el diseño de funcion calcularTipoNoprimitivo a partir de las inicializaciones y los tipos.
+ Dicha funcion no devolverá nada, pero actualizará el almacén de inicializaciones con los nuevos tipos no primitivos.
+
+ (2.1.1) La idea principal consiste en iterar sobre cada individuo y comprobar si sus tipos primitivos inicializados cumplen el cuerpo de
+ los tipos no primitivos. En caso de que se cumpla se considerará que el individuo tiene un nuevo tipo no primitivo.
+ Se llamará a la función cada vez que se haga una actualizacion en el almacen de inicializaciones añadiendo un nuevo tipo,
+ ya que dicha actualización en el almacén podría dar lugar a nuevos tipos no primitivos en la próxima iteración.
+ Terminará la ejecución cuando no se haya producido ningún cambio en el almacén de inicializaciones, entonces sabremos que ya están todos los
+ tipos calculados. Para saber si se ha producido un cambio en el almacén utilizaremos un centinela que será true cuando se haya hecho una actualización
+ en el almacén o false sino se ha realizado ninguna.
+
+        (funcion calcularTipoNoPrimitivo())
+                cent = false;
+                para cada  inicializacion en almacen_inicializaciones
+                   para cada tipo en almacen_tipos
+                        cuerpoTipoNoPrimitivo = extrae el cuerpo del tipo
+                            si (cuerpoTipoNoPrimitivo no es vacío)                                          // es decir no es caso base
+                                si (los tipos del inidividuo cumplen cuerpoTipoNoPrimitivo)
+                                        listaAux = contendra los tipos que ya tenía el individuo y añadira el nuevo tipo
+                                        actualiza almacen_inicializaciones(individuo,listaAux);
+                                        cent= true;
+
+                si (cent = true)                                                                            //si ha habido un cambio
+                    calcularTipoNoprimitivo();                                                              // se llamará recursivamente
+
+
+(DECISION 3) Un programa D tiene unas descripciones que serán necesarias conocer en determinados momentos del programa porque las consultas dependen de ello.
+Cuando una descripción se lleva a cabo, no permanecen a lo largo de otras descripciones del programa, por lo que las consultas solo dependerán de la descripción
+de la que forman parte. Una solución es almacenar las relaciones de las descripciones en un almacén global que contendrá el nombre de la relación, junto
+a los dos individuos que la forman. Se necesita almacenar esta información al procesar cada descripcion.
+
+DESCRIPCIONES:                                      almacen_relaciones
+                                                    ----------------------------
+obtiene(maria,grado-it),                           { obtiene = (maria,grado-it) }
+obtiene(pedro,grado-is),                           { obtiene = (maria,grado-it), (pedro,grado-is) }
+trabaja(ismael,compania),                          { trabaja = (ismael,compania) }
+trabaja(maria,compania1)                           { trabaja = (ismael,compania), (maria,compania1) }
+
+
+La forma en la que se actualizará el almacén será:
+
+relacionesBinarias: n=IDENTINDIVIDUOSREL PARENTESISABIERTO i=IDENTINDIVIDUOSREL COMA r=IDENTINDIVIDUOSREL PARENTESISCERRADO COMA relacionesBinarias
+                   |n=IDENTINDIVIDUOSREL PARENTESISABIERTO i=IDENTINDIVIDUOSREL COMA r=IDENTINDIVIDUOSREL PARENTESISCERRADO;
+                   {listaIndividuos = contendra los individuos que se relacionan
+                   pareja = (i,r);
+                   añadir pareja a listaIndividuos
+                   si (n se encuentra ya en almacen_relaciones)
+                       individuosPrevios = extrae la las parejas previas de n
+                       añadir 'pareja' a individuosPrevios
+                       actualiza_almacen_relaciones(n,individuosPrevios)
+                   sino
+                       actualiza_almacen_relaciones(n,listaIndividuos)}
+
+
+(DECISION 4) El rango de individuos que puede devolver una determinada consulta engloba todos los individuos inicializados, los tipos no primitivos calculados y
+los individuos que componen las relaciones de la descripción de la que forma parte esa consulta.
+Interpretaremos cada consulta 'al vuelo'. Esto implica calcular el resultado de una consulta inmediatamente al ser ejecutada.
+
+(Parametro a devolver 'result')
+consulta: INTERROGACION IDENTVARIABLE TALQUE PARENTESISABIERTO result=condicion PARENTESISCERRADO
+{imprimit result}
+
+(DECISION 4.1)Existen 4 posibles casos a la hora de evaluar la condición de una consulta.
+ a) La condición esté entre paréntesis
+ b) La condición sea un tipo
+ c) La condición sea una condición separada por un operador lógico
+ d) La condición sea una relación
+
+Para cada caso proponemos las siguientes soluciones:
+a) La condición esté entre paréntesis:
+
+(Parametro a devolver 'result');
+ condicion: PARENTESISABIERTO resultParentesis=condicion PARENTESISCERRADO
+ {result=resultParentesis}
+
+b) La condición sea un tipo:
+
+(Parametro a devolver 'result')
+    condicion: t=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO
+     {para cada inicializacion en almacen_inicializaciones
+        si el individuo contiene 't'
+            añadir individuo a result
+     }
+
+c) La condicion sea ua relacion
+
+    (Parametro a devolver 'result')
+    condicion:  r=IDENTINDIVIDUOSREL PARENTESISABIERTO IDENTVARIABLE COMA s=IDENTINDIVIDUOSREL PARENTESISCERRADO  ;
+    {para cada relacion en almacen_relaciones
+            listaParejas = extrae las parejas de individuos de 'r'
+            para cada pareja en listaParejas
+                primero = extrae el primer individuo de pareja(a la izquierda)
+                segundo = extrae el segundo individuo de pareja(a la derecha)
+                si ('s' es igual a segundo)
+                    añadir 'primero' a result
+    }
+d) La condición sea una condición separada por un operador lógico
+
+    (Parametro a devolver 'result');
+    condicion: candidatosIzq=condicion o=operador_logico candidatosDer=condicion
+        {
+        si (candidatosIzq no esta vacio && candidatosDer esta vacio && o="||")
+            result = candidatosIzq
+        si (candidatosIzq esta vacio && candidatosDer no esta vacio && o="||")
+            result = candidatosDer
+        para cada candidatoizq en candidatosIzq
+           para cada candidatoder en candidatosDer
+                si (o="&&")
+                    si (candidatoizq == candidatoder)
+                            añadir 'candidatoizq' a result
+                sino                                                // o=('||')
+                        añadir 'candidatoder' a result
+                        añadir 'candidatoizq' a result
+
+        devolver result;
+        }
+
+Gramática atribuida resultante:
+-------------------------------------------------------------------------------------------------------------------------
+     (funcion calcularTipoNoPrimitivo())
+                    cent = false;
+                    para cada  inicializacion en almacen_inicializaciones
+                       para cada tipo en almacen_tipos
+                            cuerpoTipoNoPrimitivo = extrae el cuerpo del tipo
+                                si (cuerpoTipoNoPrimitivo no es vacío)
+                                    si (los tipos del inidividuo cumplen cuerpoTipoNoPrimitivo)
+                                            listaAux = contendra los tipos que ya tenía el individuo y añadira el nuevo tipo
+                                            actualiza almacen_inicializaciones(individuo,listaAux);
+                                            cent= true;
+
+                    si (cent = true)
+                        calcularTipoNoprimitivo();
+------------------------------------------------------------------------------------------------------------------------
+ Reglas:
+
+  almacen_inicializaciones (global)  ,  almacen_relaciones (global), almacen_tipos (global)
+
+  programa : PROGRAMA individuos relaciones tipos inicializacion descripciones ;
+
+  individuos : INDIVIDUOS DOSPUNTOS decl_individuos;
+  decl_individuos: IDENTINDIVIDUOSREL COMA decl_individuos
+                  |IDENTINDIVIDUOSREL ;
+
+  relaciones:RELACIONES DOSPUNTOS decl_relaciones;
+  decl_relaciones: IDENTINDIVIDUOSREL COMA decl_relaciones
+                 | IDENTINDIVIDUOSREL;
+
+  tipos:TIPOS DOSPUNTOS decl_tipos ;
+
+  tipo: primitivo | no_primitivo;
+
+  (Parametro a devolver almacen_tipos)
+  primitivo:  i=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW {actualizar_almacen_tipos(i=[]) devolver almacen_tipos}  ;
+
+  (Parametro a devolver almacen_tipos)
+  no_primitivo: z=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW r=cuerpoTipo
+          {si (z se encuentra ya en almacen_tipos ) entonces
+               definicionPrevia = extrae la definición previa de z
+               añadir 'r' a definicionPrevia
+               actualizar_almacen_tipos(z,definicionPrevia)
+          sino
+               definicionInicial = r
+               actualizar_almacen_tipos(z,definicionInicial)}
+          devolver almacen_tipos
+
+  (Parametro a devolver r, tipos en el cuerpo de los tipos no primitivos)
+   cuerpoTipo:a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO AND r=cuerpoTipo {incluir 'a' en r}
+              |a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO;                {incluir 'a' en r}
+
+  decl_tipos: tipo (COMA tipo)* ;
+
+  (Parametro a devolver almacen_inicializaciones)
+  inicializacion:INICIALIZACION DOSPUNTOS  decl_inicializaciones
+  {        obtener almacen de inicializaciones incial
+           calcularTipoNoprimitivo();
+           devolver almacen_inicializaciones;}
+
+  (Parametro a devolver almacen_inicializaciones)
+  decl_inicializaciones:i=IDENTTIPO PARENTESISABIERTO g=IDENTINDIVIDUOSREL PARENTESISCERRADO COMA decl_inicializaciones
+                       |i=IDENTTIPO PARENTESISABIERTO g=IDENTINDIVIDUOSREL PARENTESISCERRADO;
+                      {si (g se encuentra ya en el almacen_inicializaciones)
+                                      tiposPrevios = extrae los tipos previos de g
+                                      añadir 'i' a tiposPrevios
+                                      actualizar_almacen_inicializaciones(g,tiposPrevios)
+                                 sino
+                                       añadir 'i' a tiposIniciales
+                                       actualizar_almacen_inicializaciones(g,tiposIniciales)}
+                      devolver almacen_inicializaciones
+
+  descripciones:DESCRIPCIONES DOSPUNTOS d=decl_descripcion ;
+                { Obtener almacen_relaciones de d
+                  limpiar almacen_relaciones            // es necesario porque almacen_relaciones es una variable global y la siguiente consulta no puede contener los valores de la anterior}
+
+  decl_descripcion: descripcion  (consulta (COMA consulta)*)?;
+
+  descripcion: NUMERO DOSPUNTOS relacionesBinarias;
+
+  (Parametro a devolver almacen_relaciones)
+  relacionesBinarias: n=IDENTINDIVIDUOSREL PARENTESISABIERTO i=IDENTINDIVIDUOSREL COMA r=IDENTINDIVIDUOSREL PARENTESISCERRADO COMA relacionesBinarias
+                     |n=IDENTINDIVIDUOSREL PARENTESISABIERTO i=IDENTINDIVIDUOSREL COMA r=IDENTINDIVIDUOSREL PARENTESISCERRADO;
+                     {listaIndividuos = contendra los individuos que se relacionan
+                     pareja = (i,r);
+                     añadir pareja a listaIndividuos
+                     si (n se encuentra ya en almacen_relaciones)
+                         individuosPrevios = extrae la las parejas previas de n
+                         añadir 'pareja' a individuosPrevios
+                         actualiza_almacen_relaciones(n,individuosPrevios)
+                     sino
+                         actualiza_almacen_relaciones(n,listaIndividuos)}
+                     devuelve almacen_relaciones
+
+ (Parametro a devolver 'result')
+  consulta: INTERROGACION IDENTVARIABLE TALQUE PARENTESISABIERTO result=condicion PARENTESISCERRADO
+  {imprimit result}
+
+            (Parametro a devolver 'result');
+ condicion: PARENTESISABIERTO resultParentesis=condicion PARENTESISCERRADO {result=resultParentesis}
+
+            (Parametro a devolver 'result')
+           | condicion: t=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO
+                       {para cada inicializacion en almacen_inicializaciones
+                          si el individuo contiene 't'
+                              añadir individuo a result
+                       }
+
+            (Parametro a devolver 'result')
+           | condicion:  r=IDENTINDIVIDUOSREL PARENTESISABIERTO IDENTVARIABLE COMA s=IDENTINDIVIDUOSREL PARENTESISCERRADO ;
+                              {para cada relacion en almacen_relaciones
+                                      listaParejas = extrae las parejas de individuos de 'r'
+                                      para cada pareja en listaParejas
+                                          primero = extrae el primer individuo de pareja(a la izquierda)
+                                          segundo = extrae el segundo individuo de pareja(a la derecha)
+                                          si ('s' es igual a segundo)
+                                              añadir 'primero' a result
+                              }
+
+
+             (Parametro a devolver 'result')
+           | condicion: candidatosIzq=condicion o=operador_logico candidatosDer=condicion
+                 {
+                 si (candidatosIzq no esta vacio && candidatosDer esta vacio && o="||")
+                     result = candidatosIzq
+                 si (candidatosIzq esta vacio && candidatosDer no esta vacio && o="||")
+                     result = candidatosDer
+                 para cada candidatoizq en candidatosIzq
+                    para cada candidatoder en candidatosDer
+                         si (o="&&")
+                             si (candidatoizq == candidatoder)
+                                     añadir 'candidatoizq' a result
+                         sino                                                // o=('||')
+                                 añadir 'candidatoder' a result
+                                 añadir 'candidatoizq' a result
+
+                 devolver result;
+                  }
+
+
+
+

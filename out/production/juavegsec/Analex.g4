@@ -1,0 +1,32 @@
+lexer grammar Analex;
+fragment SUBR:'_';
+
+PROGRAMA: 'PROGRAMA';
+INDIVIDUOS: 'INDIVIDUOS';
+RELACIONES: 'RELACIONES';
+TIPOS:'TIPOS';
+INICIALIZACION:'INICIALIZACION';
+DESCRIPCIONES: 'DESCRIPCIONES';
+
+ARROW: '<-';
+INTERROGACION: '?';
+AND:'&&';
+OR:'||';
+
+PARENTESISABIERTO   : '(';
+PARENTESISCERRADO   : ')';
+DOSPUNTOS:':';
+COMA: ',';
+
+IDENTINDIVIDUOSREL: [a-z] [a-z0-9_-]*;
+IDENTTIPO: [A-Z] [a-zA-Z0-9_-]*;
+IDENTVARIABLE: SUBR [a-z] [a-z0-9]*;
+TALQUE: 'tal que';
+
+NUMERO: [0-9]+;
+
+BLANCO		: ' ' -> skip;
+TABULADOR	: '\t'->skip;
+FIN_LINEA	: '\r'?'\n' ->skip;
+COMENTARIO_BLOQUE 	: '/*' .*? '*/' -> skip ;
+COMENTARIO_LINEA 	: '//' .*? FIN_LINEA -> skip ;

@@ -1,0 +1,214 @@
+Objetivo 1: Analizador semántico capaz de decidir si se lleva a cabo una definición recursiva de tipos.
+
+DECISIÓN DISEÑO 1 => OBJETIVO 1
+(DECISION 1.1) Para decidir si se lleva a a cabo una definición recursiva es necesario conocer
+Los tipos del programa con sus definiciones. Una solución es guardar estos tipos con sus definiciones
+en un almacén global que constará del identificador del tipo y su correspondiente definición. Se necesita almacenar esta información al procesar
+cada tipo.
+
+                                                                    almacen_definiciones_tipos
+
+Profesor(_x) <-,                                                    almacen_definiciones_tipos ={Profesor=[]}
+PersonaConVocacion(_x) <-,                                          almacen_definiciones_tipos ={Profesor=[], PersonaConVocacion=[]}
+ProfesorConVocacion(_x) <- Profesor(_x) && PersonaConVocacion(_x),  almacen_definiciones_tipos ={Profesor=[], PersonaConVocacion=[], ProfesorConVocacion=[[Profesor,PersonaConVocacion]]}
+Documento(_d) <- Tesis(_d),                                         almacen_definiciones_tipos ={Profesor=[], PersonaConVocacion=[], ProfesorConVocacion=[[Profesor,PersonaConVocacion]], Documento= [[Tesis]]}
+Documento(_d) <- Articulo(_d)                                       almacen_definiciones_tipos ={Profesor=[], PersonaConVocacion=[], ProfesorConVocacion=[[Profesor,PersonaConVocacion]], Documento=[[Tesis],[Articulo]]}
+
+
+(DECISION 1.2) las actualizaciones del almacén se llevarán a cabo siguiendo una ejecución secuencial de la siguiente forma:
+
+(a) Si es tipo primitivo se llevará a cabo la actualización del almacén introduciendo el nombre del tipo junto a un conjunto vacio, tal que:
+
+    primitivo:  i=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW  {actualizar_almacen_definiciones_tipos(i=[])} ;
+
+(b) Si es tipo no primitivo se llevará a cabo la actualización del almacén tal que:
+
+    no_primitivo: z=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW r=cuerpoTipo
+    {si (z se encuentra ya en almacen_definiciones_tipos ) entonces
+         definicionPrevia = extrae la definición previa de z
+         añadir 'r' a definicionPrevia
+         actualizar_almacen_definiciones_tipos(z,definicionPrevia)
+    sino
+         definicionInicial = r
+         actualizar_almacen_definiciones_tipos(z,definicionInicial)}
+
+  (Parametro a devolver r, tipos en el cuerpo de los tipos no primitivos)
+    cuerpoTipo:a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO AND r=cuerpoTipo {incluir 'a' en r}
+              |a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO;                {incluir 'a' en r}
+
+
+(DECISION 1.3) Una asignación de un tipo es recursiva cuando se le asigna un tipo en el cuerpo que coinicide con el tipo de la cabeza.
+Evaluar cada tipo = calcular si según la semántica, existe ciclicidad en el tipo o no.
+
+ Ejemplo de evaluación de tipo:
+
+  almacen_definiciones_tipos ={Documento=[[Tesis][Articulo]], Tesis=[], Articulo[[Documento]]}
+
+ (a) La definición del tipo Documento en el almacen_definiciones es [[Tesis][Articulo]]
+
+ (b) expandir la definición del tipo Documento ([Tesis] [Articulo]):
+     La defincion de tesis es vacía ([]), por lo que es un tipo primitivo y no existe recursión.
+     La definición de artículo es ([[Documento]]), que coincide con la cabeza del tipo Documento. Por lo tanto se concluye ciclicidad.
+
+
+Para detectar si existe ciclicidad proponemos el diseño de "testar la existencia de ciclicidad en la definición de un tipo v".
+Se considera que en el momento que se encuentra ciclicidad no es necesario seguir comprobando otras ramificaciones pues ya se ha encontrado
+una donde sí hay ciclicidad. Por defecto, se considera que una definición no es recursiva hasta que se pruebe lo contrario. Si no se prueba lo contrario,
+entonces se considerará que no es cíclica.
+
+    test_ciclicidad(v) devuelve (checker)
+         checker= false    //indicará si se ha encontrado ciclicidad en la definición, por defecto será false porque todavia no se ha encontrado ciclicidad
+         definicion = extrae la definición(cuerpo) de v
+         para cada i en definicion
+            sub_definicion = extrae el primer tipo de la definicion
+            checker = ciclo(v,sub_definicion);
+            si checker = true
+               break            //Se ha encontrado ciclicidad por tanto no hay que seguir comprobando otros caminos
+         devolver checker;
+
+------------------------------------------------------------------------------------------------------------------------------------
+    ciclo(V,definicion) devuelve (true/false)
+       si algun elemento de definicion ocurre en V entonces
+          devolver true
+       si no
+          para cada tipo en definicion
+              definiciontipoAsginado = extrae la definicion(cuerpo) de tipo
+              para cada sub_definicion en definiciontipoAsginado
+                    si sub_definicion no está vacía
+                        si (ciclo([V,tipo],subdefinicion)=true) entonces
+                            devolver true
+       devolver false
+------------------------------------------------------------------------------------------------------------------------------------
+Diseño de "evaluar cada tipo"
+  decl_tipos: t=tipo (COMA t=tipo)*;
+        para cada t en almacen_definiciones_tipos
+            si existe ciclicidad en t
+               devolver ERROR
+
+Objetivo 2: Analizador semántico capaz de decidir si se hace un uso correcto de la variable cuestionada en una consulta.
+
+DECISIÓN DISEÑO 2 => OBJETIVO 2
+
+(DECISION 2.1): Para decidir si una variable cuestionada está bien usada es necesario conocer tanto la variable cuestionada
+ en cada consulta, como las variables usadas en el cuerpo de la consulta. Una posible solucíon es guardar las variables utilizadas en el cuerpo de una consulta
+ en un almacén global que contenga dichas variables. Se necesita almacenar esta información al procesar cada consulta.
+
+almacen_variables = variables usadas en el cuerpo de una consulta                               alamcen_variables
+                                                                                               -------------------------
+?_t tal que (trabaja(_t,universidad1) && obtiene(_t,grado-is) && ProfesorConVocacion(_t))       [_t,_t,_t]
+                                                                                               -------------------------
+(DECISION 2.2) Las actualizaciones del almacén se llevarán a cabo siguiendo una ejecución secuencial de la siguiente forma:
+
+ a) Si es una relacion, extraemos su variable tal que:
+
+        condicion:IDENTINDIVIDUOSREL PARENTESISABIERTO b=IDENTVARIABLE COMA IDENTINDIVIDUOSREL PARENTESISCERRADO {
+           añadir 'b' a alamcen_variables}
+
+b) Si es un tipo, extraemos su variable tal que:
+
+     condicion: IDENTTIPO PARENTESISABIERTO s=IDENTVARIABLE PARENTESISCERRADO{
+        añadir 's' a alamacen_variables}
+
+(DECISION 2.3) Para decidir si una variable cuestionada está bien usada, no bastará con encontrar una sola localización del programa
+donde no se use correctamente, sino que será necesario comprobar que la variable se usa correctamente en todo el cuerpo de la consulta.
+
+consulta: INTERROGACION a=IDENTVARIABLE TALQUE PARENTESISABIERTO condicion PARENTESISCERRADO;
+{ para cada var en almacen_variables
+    si var es distinto de 'a'
+        Devolver error }
+
+condicion: PARENTESISABIERTO condicion PARENTESISCERRADO
+           | IDENTTIPO PARENTESISABIERTO s=IDENTVARIABLE PARENTESISCERRADO  {añadir 's' a almacen_variables }
+           | condicion (AND | OR) condicion
+           | IDENTINDIVIDUOSREL PARENTESISABIERTO b=IDENTVARIABLE COMA IDENTINDIVIDUOSREL PARENTESISCERRADO    {añadir 'b' a almacen_variables }
+
+
+Gramática atribuida resultante:
+------------------------------------------------------------------------------------------------------------------
+   (funcion test_ciclicidad(v)) devuelve (true/false)
+         checker= indicará si se ha encontrado ciclicidad en la definición, por defecto será false porque todavia no se ha encontrado ciclicidad
+         definicion = extrae la definición(cuerpo) de v de almacen_definiciones_tipos
+         para cada i en definicion
+            sub_definicion = extrae el primer tipo de la definicion
+            checker = ciclo(v,sub_definicion);
+            si checker = true
+               break            //Se ha encontrado ciclicidad por tanto no hay que seguir comprobando otros caminos
+         devolver checker;
+  ------------------------------------------------------------------------------------------------------------------------------
+
+    (funcion ciclo(V,definicion) devuelve (true/false)
+       si algun elemento de definicion ocurre en V entonces
+          devolver true
+       si no
+          para cada tipo en definicion
+              definiciontipoAsginado = extrae la definicion(cuerpo) de tipo de almacen_definiciones_tipos
+              para cada sub_definicion en definiciontipoAsginado
+                    si sub_definicion no está vacía
+                        si (ciclo([V,tipo],subdefinicion)=true) entonces
+                            devolver true
+
+       devolver false
+  ------------------------------------------------------------------------------------------------------------------------------
+ Reglas:
+ alamcen_variables (blobal)  ,  almacen_definiciones_tipos (global)
+
+ programa : PROGRAMA individuos relaciones tipos inicializacion descripciones ;
+
+ individuos : INDIVIDUOS DOSPUNTOS decl_individuos;
+ decl_individuos: IDENTINDIVIDUOSREL COMA decl_individuos
+                 |IDENTINDIVIDUOSREL ;
+
+ relaciones:RELACIONES DOSPUNTOS decl_relaciones;
+ decl_relaciones: IDENTINDIVIDUOSREL COMA decl_relaciones
+                | IDENTINDIVIDUOSREL;
+
+ tipos:TIPOS DOSPUNTOS decl_tipos ;
+
+ tipo: primitivo | no_primitivo;
+
+ primitivo:  i=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW {actualizar_almacen_definiciones_tipos(i=[])}  ;
+
+ no_primitivo: z=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO ARROW cuerpoTipo;{
+                 {si (z se encuentra ya en almacen_definiciones_tipos ) entonces
+                         definicionPrevia = extrae la definición previa de z
+                         añadir 'r' a definicionPrevia
+                         actualizar_almacen_definiciones_tipos(z,definicionPrevia)
+                    sino
+                         definicionInicial = r
+                         actualizar_almacen_definiciones_tipos(z,definicionInicial)}
+
+ (Parametro a devolver r, cuerpo de los tipos no primitivos)
+ cuerpoTipo:  a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO AND r=cuerpoTipo {incluir 'a' en r}
+             |a=IDENTTIPO PARENTESISABIERTO IDENTVARIABLE PARENTESISCERRADO;                 {incluir 'a' en r}
+
+ decl_tipos: t=tipo (COMA t=tipo)*;{
+        para cada t en almacen_definiciones_tipos
+            si existe ciclicidad en t
+               devolver ERROR}
+
+ inicializacion:INICIALIZACION DOSPUNTOS decl_inicializaciones ;
+
+ decl_inicializaciones:IDENTTIPO PARENTESISABIERTO IDENTINDIVIDUOSREL PARENTESISCERRADO COMA decl_inicializaciones
+                      |IDENTTIPO PARENTESISABIERTO IDENTINDIVIDUOSREL PARENTESISCERRADO;
+
+ descripciones:DESCRIPCIONES DOSPUNTOS (decl_descripcion)* ;
+
+ decl_descripcion: descripcion (consulta (COMA consulta)*)?;
+
+ descripcion: NUMERO DOSPUNTOS relacionesBinarias;
+
+ relacionesBinarias: IDENTINDIVIDUOSREL PARENTESISABIERTO IDENTINDIVIDUOSREL COMA IDENTINDIVIDUOSREL PARENTESISCERRADO COMA relacionesBinarias
+                     |IDENTINDIVIDUOSREL PARENTESISABIERTO IDENTINDIVIDUOSREL COMA IDENTINDIVIDUOSREL PARENTESISCERRADO;
+
+consulta: INTERROGACION a=IDENTVARIABLE TALQUE PARENTESISABIERTO condicion PARENTESISCERRADO;
+{ para cada var en almacen_variables
+    si var es distinto de 'a'
+        Devolver error }
+
+condicion: PARENTESISABIERTO condicion PARENTESISCERRADO
+           | IDENTTIPO PARENTESISABIERTO s=IDENTVARIABLE PARENTESISCERRADO  {añadir 's' a almacen_variables }
+           | condicion (AND | OR) condicion
+           | IDENTINDIVIDUOSREL PARENTESISABIERTO b=IDENTVARIABLE COMA IDENTINDIVIDUOSREL PARENTESISCERRADO {añadir 'b' a almacen_variables }
+
+
+
